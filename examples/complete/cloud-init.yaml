@@ -1,0 +1,19 @@
+#cloud-config
+hostname: ${hostname}
+fqdn: ${hostname}.local
+manage_etc_hosts: true
+
+timezone: ${timezone}
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - wget
+  - git
+  - htop
+  - vim
+
+runcmd:
+  - echo "Instance ${hostname} initialized" > /tmp/cloud-init-complete

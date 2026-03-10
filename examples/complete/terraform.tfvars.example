@@ -1,0 +1,32 @@
+# Copy this file to terraform.tfvars and fill in your values
+
+# OCI Authentication
+tenancy_ocid     = "ocid1.tenancy.oc1..example"
+user_ocid        = "ocid1.user.oc1..example"
+fingerprint      = "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99"
+private_key_path = "~/.oci/oci_api_key.pem"
+region           = "eu-paris-1"
+
+# Compartment
+compartment_ocid = "ocid1.compartment.oc1..example"
+
+# SSH Key
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+
+# Instance Configuration
+instance_display_name   = "complete-instance"
+instance_shape          = "VM.Standard.A1.Flex"
+instance_ocpus          = 4
+instance_memory_in_gbs  = 24
+boot_volume_size_in_gbs = 150
+os_version              = "24.04"
+
+# Network
+vcn_cidr_block    = "10.0.0.0/16"
+subnet_cidr_block = "10.0.1.0/24"
+
+# Security - Restrict SSH to your IP
+allowed_ssh_cidrs = ["1.2.3.4/32"]
+
+# Server Configuration
+timezone = "Europe/Paris"

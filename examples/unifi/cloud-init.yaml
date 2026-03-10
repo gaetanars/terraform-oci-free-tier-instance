@@ -1,0 +1,26 @@
+#cloud-config
+# Minimal cloud-init configuration for Ansible provisioning
+# Application configuration is managed by Ansible
+
+hostname: ${hostname}
+timezone: ${timezone}
+
+# Package management
+package_update: true
+package_upgrade: true
+package_reboot_if_required: false
+
+# Install only essential packages for Ansible
+packages:
+  # Python for Ansible
+  - python3
+  - python3-pip
+  - python3-apt
+  # Base packages
+  - ca-certificates
+  - curl
+  - sudo
+
+# Ensure cloud-init is fully complete before Ansible runs
+runcmd:
+  - echo "Cloud-init completed at $(date)" >> /var/log/cloud-init-completed.log
