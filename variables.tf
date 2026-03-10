@@ -211,6 +211,24 @@ variable "internet_gateway_id" {
   default     = null
 }
 
+variable "create_nat_gateway" {
+  description = "Create a NAT Gateway to allow outbound internet access from private subnets. Only effective in full-stack mode (vcn_id null) with subnet_type = 'private'."
+  type        = bool
+  default     = false
+}
+
+variable "nat_gateway_id" {
+  description = "OCID of an existing NAT Gateway in the provided VCN. Used in hybrid mode (vcn_id provided, subnet_id null) for private subnets with outbound internet access."
+  type        = string
+  default     = null
+}
+
+variable "nat_gateway_display_name" {
+  description = "Display name for the NAT Gateway (used when create_nat_gateway = true)"
+  type        = string
+  default     = "oci-nat-gateway"
+}
+
 variable "internet_gateway_display_name" {
   description = "Display name for Internet Gateway (used when creating new VCN)"
   type        = string
