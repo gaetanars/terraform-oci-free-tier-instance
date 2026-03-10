@@ -42,7 +42,7 @@ module "oci_instance" {
   instance_memory_in_gbs = 12
 
   # Private subnet — no public IP on the instance
-  subnet_type = "private"
+  subnet_type    = "private"
   public_ip_mode = "none"
 
   # NAT Gateway: allows outbound internet access from the private subnet
