@@ -205,14 +205,20 @@ variable "subnet_type" {
 # Network Configuration - Internet Gateway & Routing
 # ============================================================================
 
+variable "create_internet_gateway" {
+  description = "Create an Internet Gateway in the VCN (full-stack mode only, requires vcn_id = null). Must be set to true for public subnets that need inbound/outbound internet access via their public IP."
+  type        = bool
+  default     = false
+}
+
 variable "internet_gateway_id" {
-  description = "OCID of an existing Internet Gateway in the provided VCN. Required in hybrid mode (vcn_id provided, subnet_id null) for public subnets — the module cannot create an IGW in an existing VCN."
+  description = "OCID of an existing Internet Gateway in the provided VCN. Used in hybrid mode (vcn_id provided, subnet_id null) for public subnets — the module cannot create an IGW in an existing VCN."
   type        = string
   default     = null
 }
 
 variable "create_nat_gateway" {
-  description = "Create a NAT Gateway to allow outbound internet access from private subnets. Only effective in full-stack mode (vcn_id null) with subnet_type = 'private'."
+  description = "Create a NAT Gateway in the VCN (full-stack mode only, requires vcn_id = null). For private subnets the gateway is automatically wired into the route table. For public subnets the gateway is created and exposed via the nat_gateway_id output so it can be referenced by external route tables or future private subnets."
   type        = bool
   default     = false
 }

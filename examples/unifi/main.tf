@@ -249,10 +249,11 @@ module "unifi_instance" {
   os_version              = var.ubuntu_version
 
   # Network (Full Stack)
-  vcn_cidr_blocks   = [var.vcn_cidr_block]
-  subnet_cidr_block = var.subnet_cidr_block
-  vcn_dns_label     = "unifinet"
-  subnet_dns_label  = "unifisubnet"
+  vcn_cidr_blocks         = [var.vcn_cidr_block]
+  subnet_cidr_block       = var.subnet_cidr_block
+  vcn_dns_label           = "unifinet"
+  subnet_dns_label        = "unifisubnet"
+  create_internet_gateway = true
 
   # Public IP (Reserved)
   public_ip_mode           = "reserved"

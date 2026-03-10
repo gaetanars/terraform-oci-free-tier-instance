@@ -6,8 +6,8 @@ locals {
   # Determine network creation mode based on provided variables
   create_vcn    = var.vcn_id == null
   create_subnet = var.subnet_id == null
-  create_igw    = local.create_vcn && var.subnet_type == "public"
-  create_nat_gw = local.create_vcn && var.subnet_type == "private" && var.create_nat_gateway
+  create_igw    = local.create_vcn && var.create_internet_gateway
+  create_nat_gw = local.create_vcn && var.create_nat_gateway
 
   # Network mode for metadata/debugging
   network_mode = (
