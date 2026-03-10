@@ -11,7 +11,7 @@ resource "oci_core_vcn" "this" {
   cidr_blocks    = var.vcn_cidr_blocks
 
   freeform_tags = var.freeform_tags
-  defined_tags  = var.defined_tags
+  defined_tags  = length(var.defined_tags) > 0 ? var.defined_tags : null
 }
 
 # ============================================================================
@@ -27,7 +27,7 @@ resource "oci_core_internet_gateway" "this" {
   enabled        = true
 
   freeform_tags = var.freeform_tags
-  defined_tags  = var.defined_tags
+  defined_tags  = length(var.defined_tags) > 0 ? var.defined_tags : null
 }
 
 # ============================================================================
@@ -55,7 +55,7 @@ resource "oci_core_route_table" "this" {
   }
 
   freeform_tags = var.freeform_tags
-  defined_tags  = var.defined_tags
+  defined_tags  = length(var.defined_tags) > 0 ? var.defined_tags : null
 }
 
 # ============================================================================
@@ -80,5 +80,5 @@ resource "oci_core_subnet" "this" {
   security_list_ids = local.security_list_ids
 
   freeform_tags = var.freeform_tags
-  defined_tags  = var.defined_tags
+  defined_tags  = length(var.defined_tags) > 0 ? var.defined_tags : null
 }
