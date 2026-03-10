@@ -52,7 +52,7 @@ module "oci_instance" {
   vcn_cidr_blocks   = ["10.0.0.0/16"]
   subnet_cidr_block = "10.0.1.0/24"
   vcn_dns_label     = "privatenatvnet"
-  subnet_dns_label  = "privatenatsubnet"
+  subnet_dns_label  = "privnatsubnet"
 
   # Security: no SSH from internet (instance is private)
   # Access via Bastion, VPN, or OCI Cloud Shell instead
