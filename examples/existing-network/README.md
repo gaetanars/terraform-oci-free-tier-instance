@@ -46,9 +46,9 @@ module "oci_instance" {
 
 Remove the `oci_core_vcn` and `oci_core_subnet` resources from `main.tf`.
 
-### Scenario 2: VCN Exists, Create New Subnet
+### Scenario 2: VCN Exists, Create New Subnet (Hybrid Mode)
 
-If you have a VCN but want to create a new subnet:
+If you have a VCN but want to create a new subnet. For public subnets, you **must** provide the existing IGW OCID so the module can add the default route to the new route table:
 
 ```hcl
 module "oci_instance" {
@@ -57,16 +57,19 @@ module "oci_instance" {
   compartment_id = var.compartment_ocid
   ssh_public_key = file(pathexpand(var.ssh_public_key_path))
 
-  # Use existing VCN, module will create subnet
-  vcn_id            = "ocid1.vcn.oc1.eu-paris-1.example"
-  subnet_cidr_block = "10.1.2.0/24"
-  subnet_dns_label  = "newsubnet"
+  # Use existing VCN, module will create subnet + route table
+  vcn_id               = "ocid1.vcn.oc1.eu-paris-1.example"
+  internet_gateway_id  = "ocid1.internetgateway.oc1.eu-paris-1.example"  # required for public subnet
+  subnet_cidr_block    = "10.1.2.0/24"
+  subnet_dns_label     = "newsubnet"
 
   display_name = "my-instance"
 }
 ```
 
-This is **Hybrid** mode: VCN exists, module creates subnet + instance.
+This is **Hybrid** mode: VCN exists, module creates subnet + route table + instance.
+
+> **Note**: If `internet_gateway_id` is not provided and `subnet_type = "public"` (default), the created route table will have no default route and the instance won't have internet access.
 
 ## Usage
 

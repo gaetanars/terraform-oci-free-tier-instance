@@ -41,11 +41,13 @@ resource "oci_core_route_table" "this" {
   vcn_id         = local.vcn_id
   display_name   = var.route_table_display_name
 
-  # Add route to Internet Gateway if created (for public subnets)
+  # Add route to Internet Gateway for public subnets:
+  # - full-stack mode: uses the IGW created by this module
+  # - hybrid mode: uses var.internet_gateway_id (must be provided by the caller)
   dynamic "route_rules" {
-    for_each = local.create_igw ? [1] : []
+    for_each = local.igw_id != null && var.subnet_type == "public" ? [1] : []
     content {
-      network_entity_id = oci_core_internet_gateway.this[0].id
+      network_entity_id = local.igw_id
       destination       = "0.0.0.0/0"
       destination_type  = "CIDR_BLOCK"
       description       = "Route to Internet Gateway"

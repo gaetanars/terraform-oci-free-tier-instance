@@ -3,7 +3,8 @@
 # ============================================================================
 
 resource "oci_core_volume" "block_volumes" {
-  for_each = { for idx, vol in var.block_volumes : idx => vol }
+  # Keyed by display_name — must be unique across all block volumes
+  for_each = { for vol in var.block_volumes : vol.display_name => vol }
 
   compartment_id      = var.compartment_id
   availability_domain = local.availability_domain
@@ -20,10 +21,10 @@ resource "oci_core_volume" "block_volumes" {
 # ============================================================================
 
 resource "oci_core_volume_attachment" "block_volume_attachments" {
-  for_each = { for idx, vol in var.block_volumes : idx => vol }
+  for_each = { for vol in var.block_volumes : vol.display_name => vol }
 
   attachment_type = lookup(each.value, "attachment_type", "paravirtualized")
-  instance_id     = local.instance.id
+  instance_id     = oci_core_instance.this.id
   volume_id       = oci_core_volume.block_volumes[each.key].id
 
   # Device path (optional)
@@ -38,7 +39,6 @@ resource "oci_core_volume_attachment" "block_volume_attachments" {
 
   depends_on = [
     oci_core_instance.this,
-    oci_core_instance.this_ignore_metadata,
     oci_core_volume.block_volumes
   ]
 }
@@ -60,8 +60,8 @@ data "oci_core_volume_backup_policies" "predefined_policies" {
 # Assign backup policies to block volumes
 resource "oci_core_volume_backup_policy_assignment" "block_volume_backup_assignments" {
   for_each = {
-    for idx, vol in var.block_volumes :
-    idx => vol
+    for vol in var.block_volumes :
+    vol.display_name => vol
     if lookup(vol, "backup_policy_id", null) != null
   }
 

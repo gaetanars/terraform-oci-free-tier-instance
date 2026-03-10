@@ -67,20 +67,40 @@ variable "boot_volume_size_in_gbs" {
 }
 
 variable "boot_volume_vpus_per_gb" {
-  description = "Volume Performance Units per GB (10 = Balanced, 20 = Higher Performance)"
+  description = "Volume Performance Units per GB (10 = Balanced, 20 = Higher Performance). Always Free tier only covers 10 and 20 — values above 20 incur additional costs."
   type        = number
   default     = 10
 
   validation {
     condition     = contains([10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120], var.boot_volume_vpus_per_gb)
-    error_message = "Valid values are 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120"
+    error_message = "Valid values are 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120. Note: only 10 and 20 are Always Free eligible."
   }
 }
 
 variable "preserve_boot_volume" {
-  description = "Whether to preserve boot volume on instance termination"
+  description = "Whether to preserve boot volume on instance termination. Always true when source_type = 'bootVolume' (the volume is the source and cannot be deleted)."
   type        = bool
-  default     = false
+  default     = true
+}
+
+variable "source_type" {
+  description = "Boot source: 'image' for fresh install, 'bootVolume' to reuse an existing boot volume"
+  type        = string
+  default     = "image"
+  validation {
+    condition     = contains(["image", "bootVolume"], var.source_type)
+    error_message = "source_type must be 'image' or 'bootVolume'."
+  }
+}
+
+variable "boot_volume_id" {
+  description = "OCID of the boot volume to use when source_type = 'bootVolume'. Get it from the 'boot_volume_id' output after first deploy."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.source_type != "bootVolume" || var.boot_volume_id != null
+    error_message = "boot_volume_id is required when source_type = 'bootVolume'."
+  }
 }
 
 # ============================================================================
@@ -185,6 +205,12 @@ variable "subnet_type" {
 # Network Configuration - Internet Gateway & Routing
 # ============================================================================
 
+variable "internet_gateway_id" {
+  description = "OCID of an existing Internet Gateway in the provided VCN. Required in hybrid mode (vcn_id provided, subnet_id null) for public subnets — the module cannot create an IGW in an existing VCN."
+  type        = string
+  default     = null
+}
+
 variable "internet_gateway_display_name" {
   description = "Display name for Internet Gateway (used when creating new VCN)"
   type        = string
@@ -244,9 +270,9 @@ variable "security_list_display_name" {
 }
 
 variable "allowed_ssh_cidrs" {
-  description = "List of CIDR blocks allowed to SSH (port 22). Empty list disables SSH ingress rule"
+  description = "List of CIDR blocks allowed to SSH (port 22). Empty list disables SSH ingress rule. Restrict to known IPs in production (e.g., [\"1.2.3.4/32\"])."
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  default     = []
 }
 
 variable "enable_icmp" {
@@ -369,7 +395,7 @@ variable "nsg_rules" {
 # ============================================================================
 
 variable "user_data" {
-  description = "Base64-encoded user data (cloud-init). Will be base64 encoded automatically if not already"
+  description = "Plain text user data (cloud-init script or cloud-config YAML). Will be base64 encoded automatically. Use cloud_init_template_file for template rendering."
   type        = string
   default     = null
 }
@@ -475,6 +501,12 @@ variable "fault_domain" {
 # Instance Options
 # ============================================================================
 
+variable "ssh_user" {
+  description = "Username for SSH connection used in the ssh_command output. Default is 'ubuntu' for Ubuntu images — change if using a custom image with a different default user."
+  type        = string
+  default     = "ubuntu"
+}
+
 variable "assign_private_dns_record" {
   description = "Whether to assign a private DNS record to the instance"
   type        = bool
@@ -497,28 +529,4 @@ variable "is_pv_encryption_in_transit_enabled" {
   description = "Enable in-transit encryption for paravirtualized volume attachments. Set to null to leave unmanaged (recommended when importing existing instances)"
   type        = bool
   default     = null
-}
-
-# ============================================================================
-# Lifecycle Configuration
-# ============================================================================
-
-variable "lifecycle_ignore_changes" {
-  description = <<-EOT
-    List of instance attribute names to ignore changes on. Supported values: "metadata".
-
-    When switching an existing instance to a lifecycle variant (e.g. adding "metadata"),
-    add a moved block in your root module to avoid replacement:
-      moved {
-        from = module.<name>.oci_core_instance.this[0]
-        to   = module.<name>.oci_core_instance.this_ignore_metadata[0]
-      }
-  EOT
-  type        = list(string)
-  default     = []
-
-  validation {
-    condition     = alltrue([for v in var.lifecycle_ignore_changes : contains(["metadata"], v)])
-    error_message = "Supported values for lifecycle_ignore_changes: \"metadata\"."
-  }
 }

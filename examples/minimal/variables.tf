@@ -39,3 +39,9 @@ variable "ssh_public_key_path" {
   type        = string
   default     = "~/.ssh/id_rsa.pub"
 }
+
+variable "allowed_ssh_cidrs" {
+  description = "CIDR blocks allowed to SSH. Restrict to your IP (e.g., [\"1.2.3.4/32\"])"
+  type        = list(string)
+  default     = []
+}

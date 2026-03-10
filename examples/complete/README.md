@@ -93,7 +93,7 @@ To destroy all resources:
 terraform destroy
 ```
 
-Note: If `prevent_public_ip_destroy = true`, you'll need to set it to `false` first or manually remove the reserved IP from the state before destroying.
+Note: If you've uncommented the `prevent_destroy` lifecycle block in `compute.tf`, you'll need to remove it or manually remove the reserved IP from state before destroying.
 
 ## Estimated Cost
 

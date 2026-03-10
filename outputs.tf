@@ -4,12 +4,12 @@
 
 output "instance_id" {
   description = "OCID of the compute instance"
-  value       = local.instance.id
+  value       = oci_core_instance.this.id
 }
 
 output "instance_state" {
   description = "State of the compute instance"
-  value       = local.instance.state
+  value       = oci_core_instance.this.state
 }
 
 output "instance_private_ip" {
@@ -28,32 +28,32 @@ output "instance_public_ip" {
 
 output "instance_display_name" {
   description = "Display name of the instance"
-  value       = local.instance.display_name
+  value       = oci_core_instance.this.display_name
 }
 
 output "instance_region" {
   description = "Region where the instance is located"
-  value       = local.instance.region
+  value       = oci_core_instance.this.region
 }
 
 output "instance_availability_domain" {
   description = "Availability domain where the instance is located"
-  value       = local.instance.availability_domain
+  value       = oci_core_instance.this.availability_domain
 }
 
 output "instance_fault_domain" {
   description = "Fault domain where the instance is located"
-  value       = local.instance.fault_domain
+  value       = oci_core_instance.this.fault_domain
 }
 
 output "instance_shape" {
   description = "Shape of the instance"
-  value       = local.instance.shape
+  value       = oci_core_instance.this.shape
 }
 
 output "instance_shape_config" {
   description = "Shape configuration (OCPUs and memory for flexible shapes)"
-  value       = local.is_flex_shape ? local.instance.shape_config : null
+  value       = local.is_flex_shape ? oci_core_instance.this.shape_config : null
 }
 
 # ============================================================================
@@ -160,7 +160,7 @@ output "secondary_vnic_private_ips" {
 
 output "boot_volume_id" {
   description = "OCID of the boot volume"
-  value       = local.instance.boot_volume_id
+  value       = oci_core_instance.this.boot_volume_id
 }
 
 # ============================================================================
@@ -171,7 +171,7 @@ output "ssh_command" {
   description = "SSH command to connect to the instance"
   value = (
     local.has_public_ip ?
-    "ssh ubuntu@${local.create_reserved_ip ? oci_core_public_ip.this[0].ip_address : data.oci_core_vnic.primary_vnic.public_ip_address}" :
+    "ssh ${var.ssh_user}@${local.create_reserved_ip ? oci_core_public_ip.this[0].ip_address : data.oci_core_vnic.primary_vnic.public_ip_address}" :
     "Instance has no public IP (private only)"
   )
 }
