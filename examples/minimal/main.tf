@@ -30,4 +30,7 @@ module "oci_instance" {
 
   # Optional (using defaults)
   display_name = "minimal-instance"
+
+  # Restrict SSH to your IP — the module no longer opens SSH to 0.0.0.0/0 by default
+  allowed_ssh_cidrs = var.allowed_ssh_cidrs
 }

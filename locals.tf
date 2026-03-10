@@ -27,6 +27,9 @@ locals {
     local.create_subnet ? oci_core_route_table.this[0].id :
     null
   )
+
+  # IGW to use in the route table (created in full-stack mode, or provided for hybrid mode)
+  igw_id = local.create_igw ? oci_core_internet_gateway.this[0].id : var.internet_gateway_id
 }
 
 # ============================================================================
@@ -67,17 +70,18 @@ locals {
 
 locals {
   # Auto-select image based on architecture, or use provided image_id
+  # try() is a safety belt for when source_type = "bootVolume" (data sources have count=0)
   selected_image_id = (
     var.source_image_id != null ? var.source_image_id :
-    local.is_arm_shape ? data.oci_core_images.ubuntu_arm.images[0].id :
-    data.oci_core_images.ubuntu_amd.images[0].id
+    local.is_arm_shape ? try(data.oci_core_images.ubuntu_arm[0].images[0].id, null) :
+    try(data.oci_core_images.ubuntu_amd[0].images[0].id, null)
   )
 
   # Image display name for metadata
   selected_image_name = (
     var.source_image_id != null ? "custom" :
-    local.is_arm_shape ? data.oci_core_images.ubuntu_arm.images[0].display_name :
-    data.oci_core_images.ubuntu_amd.images[0].display_name
+    local.is_arm_shape ? try(data.oci_core_images.ubuntu_arm[0].images[0].display_name, "unknown") :
+    try(data.oci_core_images.ubuntu_amd[0].images[0].display_name, "unknown")
   )
 }
 
@@ -108,12 +112,8 @@ locals {
     var.user_data
   )
 
-  # Base64 encode user_data if provided and not already encoded
-  user_data_base64 = (
-    local.user_data_content != null ?
-    (can(base64decode(local.user_data_content)) ? local.user_data_content : base64encode(local.user_data_content)) :
-    null
-  )
+  # Base64 encode user_data — always encode plain text content
+  user_data_base64 = local.user_data_content != null ? base64encode(local.user_data_content) : null
 }
 
 # ============================================================================
@@ -228,29 +228,11 @@ locals {
 # ============================================================================
 
 locals {
-  # Instance metadata
+  # Instance metadata — exclude user_data key when null to avoid perpetual diffs
   instance_metadata = merge(
-    {
-      ssh_authorized_keys = var.ssh_public_key
-      user_data           = local.user_data_base64
-    },
+    { ssh_authorized_keys = var.ssh_public_key },
+    local.user_data_base64 != null ? { user_data = local.user_data_base64 } : {},
     var.extended_metadata
-  )
-}
-
-# ============================================================================
-# Lifecycle Configuration
-# ============================================================================
-
-locals {
-  # Derived flags for each supported lifecycle variant
-  _lifecycle_ignore_metadata = contains(var.lifecycle_ignore_changes, "metadata")
-
-  # Reference to the active instance resource (selected by lifecycle variant)
-  instance = (
-    local._lifecycle_ignore_metadata
-    ? oci_core_instance.this_ignore_metadata[0]
-    : oci_core_instance.this[0]
   )
 }
 

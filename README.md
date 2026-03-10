@@ -61,7 +61,7 @@ module "instance" {
 
 ### 3. Hybrid Mode
 
-Uses existing VCN, creates new subnet:
+Uses existing VCN, creates new subnet. For public subnets, provide the existing IGW OCID via `internet_gateway_id` so the module can add the default route:
 
 ```hcl
 module "instance" {
@@ -70,8 +70,9 @@ module "instance" {
   compartment_id = var.compartment_id
   ssh_public_key = file("~/.ssh/id_rsa.pub")
 
-  vcn_id            = "ocid1.vcn.oc1...."
-  subnet_cidr_block = "10.0.2.0/24"
+  vcn_id               = "ocid1.vcn.oc1...."
+  subnet_cidr_block    = "10.0.2.0/24"
+  internet_gateway_id  = "ocid1.internetgateway.oc1...."  # required for public subnet
 }
 ```
 
@@ -87,9 +88,9 @@ module "instance" {
 
   # ... required vars ...
 
-  public_ip_mode              = "reserved"
-  reserved_ip_display_name    = "my-reserved-ip"
-  prevent_public_ip_destroy   = true  # Prevent accidental deletion
+  public_ip_mode           = "reserved"
+  reserved_ip_display_name = "my-reserved-ip"
+  # To prevent accidental deletion, uncomment the lifecycle block in compute.tf
 }
 ```
 
@@ -132,6 +133,9 @@ module "oci_instance" {
   # Required
   compartment_id = "ocid1.compartment.oc1...."
   ssh_public_key = file("~/.ssh/id_rsa.pub")
+
+  # SSH is closed by default — explicitly allow your IP
+  allowed_ssh_cidrs = ["1.2.3.4/32"]
 }
 ```
 
@@ -140,7 +144,7 @@ This creates:
 - Public subnet 10.0.1.0/24
 - VM.Standard.A1.Flex instance (2 OCPUs, 12GB RAM)
 - Ephemeral public IP
-- Security list with SSH + ICMP rules
+- Security list with SSH (restricted) + ICMP rules
 
 ### Complete Configuration
 
@@ -167,9 +171,8 @@ module "oci_instance" {
   subnet_dns_label  = "mysubnet"
 
   # Public IP
-  public_ip_mode              = "reserved"
-  reserved_ip_display_name    = "my-ip"
-  prevent_public_ip_destroy   = true
+  public_ip_mode           = "reserved"
+  reserved_ip_display_name = "my-ip"
 
   # Security
   allowed_ssh_cidrs = ["1.2.3.4/32"]
@@ -320,6 +323,8 @@ echo '/dev/sdb /mnt/data ext4 defaults 0 2' | sudo tee -a /etc/fstab
 
 ### Inline User Data
 
+Pass plain text — the module base64-encodes it automatically:
+
 ```hcl
 module "instance" {
   source = "./modules/oci-free-tier-instance"
@@ -386,45 +391,197 @@ module "instance" {
 
 ## Inputs
 
-| Name | Description | Type | Default | Required |
-|------|-------------|------|---------|----------|
-| `compartment_id` | OCID of compartment | `string` | - | yes |
-| `ssh_public_key` | SSH public key content | `string` | - | yes |
-| `display_name` | Instance display name | `string` | `"oci-instance"` | no |
-| `instance_shape` | Instance shape | `string` | `"VM.Standard.A1.Flex"` | no |
-| `instance_ocpus` | Number of OCPUs | `number` | `2` | no |
-| `instance_memory_in_gbs` | Memory in GB | `number` | `12` | no |
-| `boot_volume_size_in_gbs` | Boot volume size | `number` | `50` | no |
-| `os_version` | Ubuntu version | `string` | `"24.04"` | no |
-| `vcn_id` | Existing VCN OCID | `string` | `null` | no |
-| `subnet_id` | Existing subnet OCID | `string` | `null` | no |
-| `vcn_cidr_blocks` | VCN CIDR blocks | `list(string)` | `["10.0.0.0/16"]` | no |
-| `subnet_cidr_block` | Subnet CIDR block | `string` | `"10.0.1.0/24"` | no |
-| `public_ip_mode` | Public IP mode | `string` | `"ephemeral"` | no |
-| `allowed_ssh_cidrs` | Allowed SSH CIDRs | `list(string)` | `["0.0.0.0/0"]` | no |
-| `enable_icmp` | Enable ICMP | `bool` | `true` | no |
-| `ingress_security_rules` | Custom ingress rules | `list(object)` | `[]` | no |
-| `create_nsg` | Create NSG | `bool` | `false` | no |
-| `nsg_rules` | NSG rules | `list(object)` | `[]` | no |
-| `block_volumes` | Block volumes | `list(object)` | `[]` | no |
-| `boot_volume_backup_policy` | Backup policy | `string` | `null` | no |
+### Required
 
-See [variables.tf](./variables.tf) for complete list and descriptions.
+| Name | Description | Type |
+|------|-------------|------|
+| `compartment_id` | OCID of the compartment where resources will be created | `string` |
+| `ssh_public_key` | SSH public key content (not path) for instance access | `string` |
+
+### Instance
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `display_name` | Display name for the compute instance | `string` | `"oci-instance"` |
+| `instance_shape` | Shape of the instance (`VM.Standard.A1.Flex` or `VM.Standard.E2.1.Micro`) | `string` | `"VM.Standard.A1.Flex"` |
+| `instance_ocpus` | Number of OCPUs (1–4 for Always Free) | `number` | `2` |
+| `instance_memory_in_gbs` | Memory in GB (1–24 for Always Free) | `number` | `12` |
+| `boot_volume_size_in_gbs` | Boot volume size in GB (50–200) | `number` | `50` |
+| `boot_volume_vpus_per_gb` | Boot volume VPUs/GB — **values > 20 are not Always Free** | `number` | `10` |
+| `preserve_boot_volume` | Preserve boot volume on instance termination | `bool` | `true` |
+| `source_type` | Boot source: `image` for fresh install, `bootVolume` to reuse an existing boot volume | `string` | `"image"` |
+| `boot_volume_id` | OCID of the boot volume to use when `source_type = "bootVolume"` | `string` | `null` |
+| `availability_domain` | Availability domain name or index (0, 1, 2). If null, uses first available AD | `string` | `null` |
+| `fault_domain` | Fault domain for the instance | `string` | `null` |
+| `is_pv_encryption_in_transit_enabled` | Enable in-transit encryption for paravirtualized attachments | `bool` | `null` |
+
+### Image
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `os_version` | Ubuntu version for auto-selection (e.g. `22.04`, `24.04`) | `string` | `"24.04"` |
+| `source_image_id` | Custom image OCID. If null, auto-selects Ubuntu based on architecture | `string` | `null` |
+
+### Network — VCN
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `vcn_id` | Existing VCN OCID. If null, creates a new VCN | `string` | `null` |
+| `vcn_cidr_blocks` | CIDR blocks for the VCN (used when creating new VCN) | `list(string)` | `["10.0.0.0/16"]` |
+| `vcn_display_name` | Display name for the VCN | `string` | `"oci-vcn"` |
+| `vcn_dns_label` | DNS label for the VCN (alphanumeric, max 15 chars) | `string` | `"ocivnet"` |
+
+### Network — Subnet
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `subnet_id` | Existing subnet OCID. If null, creates a new subnet | `string` | `null` |
+| `subnet_cidr_block` | CIDR block for the subnet | `string` | `"10.0.1.0/24"` |
+| `subnet_display_name` | Display name for the subnet | `string` | `"oci-subnet"` |
+| `subnet_dns_label` | DNS label for the subnet (alphanumeric, max 15 chars) | `string` | `"ocisubnet"` |
+| `subnet_type` | Type of subnet: `public` or `private` | `string` | `"public"` |
+
+### Network — Routing & Gateway
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `internet_gateway_id` | Existing IGW OCID — required for hybrid mode with public subnet | `string` | `null` |
+| `internet_gateway_display_name` | Display name for the Internet Gateway | `string` | `"oci-igw"` |
+| `route_table_id` | Existing route table OCID. If null, uses VCN default or creates new | `string` | `null` |
+| `route_table_display_name` | Display name for the route table | `string` | `"oci-route-table"` |
+
+### Public IP
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `public_ip_mode` | Public IP mode: `reserved`, `ephemeral`, or `none` | `string` | `"ephemeral"` |
+| `reserved_ip_display_name` | Display name for the reserved public IP | `string` | `"oci-reserved-ip"` |
+
+### Security — Security Lists
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `security_list_ids` | Existing security list OCIDs to attach. If empty, creates a new one | `list(string)` | `[]` |
+| `security_list_display_name` | Display name for the security list | `string` | `"oci-security-list"` |
+| `allowed_ssh_cidrs` | Allowed SSH CIDRs — **empty by default, SSH is closed unless set** | `list(string)` | `[]` |
+| `enable_icmp` | Enable ICMP (ping) ingress | `bool` | `true` |
+| `ingress_security_rules` | Additional custom ingress security rules | `list(object)` | `[]` |
+| `egress_security_rules` | Custom egress rules (default: allow all) | `list(object)` | `[]` |
+
+### Security — Network Security Groups (NSGs)
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `create_nsg` | Create a Network Security Group for the instance | `bool` | `false` |
+| `nsg_display_name` | Display name for the NSG | `string` | `"oci-nsg"` |
+| `nsg_ids` | Existing NSG OCIDs to attach to the instance VNIC | `list(string)` | `[]` |
+| `nsg_rules` | NSG rules (used when `create_nsg = true`) | `list(object)` | `[]` |
+
+### Cloud-init
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `user_data` | Plain text cloud-init (base64-encoded automatically) | `string` | `null` |
+| `cloud_init_template_file` | Path to cloud-init template file | `string` | `null` |
+| `cloud_init_template_vars` | Variables to pass to the cloud-init template | `map(string)` | `{}` |
+| `extended_metadata` | Additional metadata to pass to the instance | `map(string)` | `{}` |
+
+### Storage
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `block_volumes` | Block volumes to create and attach (`display_name` must be unique) | `list(object)` | `[]` |
+| `boot_volume_backup_policy` | Backup policy for boot volume: `bronze`, `silver`, `gold`, or OCID | `string` | `null` |
+
+### Secondary VNICs
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `secondary_vnics` | Secondary VNICs to attach to the instance | `list(object)` | `[]` |
+
+### Instance Options
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `ssh_user` | Username for the `ssh_command` output | `string` | `"ubuntu"` |
+| `hostname_label` | Hostname label for the primary VNIC (DNS hostname) | `string` | `null` |
+| `assign_private_dns_record` | Assign a private DNS record to the instance | `bool` | `false` |
+| `skip_source_dest_check` | Skip source/destination check (required for NAT/routing) | `bool` | `false` |
+
+### Tagging
+
+| Name | Description | Type | Default |
+|------|-------------|------|---------|
+| `freeform_tags` | Freeform tags applied to all resources | `map(string)` | `{}` |
+| `defined_tags` | Defined tags applied to all resources | `map(string)` | `{}` |
+
+See [variables.tf](./variables.tf) for full type definitions and validations.
 
 ## Outputs
 
+### Instance
+
 | Name | Description |
 |------|-------------|
-| `instance_id` | Instance OCID |
-| `instance_public_ip` | Public IP address |
+| `instance_id` | OCID of the compute instance |
+| `instance_state` | State of the compute instance |
+| `instance_display_name` | Display name of the instance |
+| `instance_region` | Region where the instance is located |
+| `instance_availability_domain` | Availability domain of the instance |
+| `instance_fault_domain` | Fault domain of the instance |
+| `instance_shape` | Shape of the instance |
+| `instance_shape_config` | Shape configuration (OCPUs and memory for flexible shapes) |
+| `instance_public_ip` | Public IP address (null if `public_ip_mode = "none"`) |
 | `instance_private_ip` | Private IP address |
-| `instance_state` | Instance state |
-| `vcn_id` | VCN OCID |
-| `subnet_id` | Subnet OCID |
-| `ssh_command` | SSH command to connect |
-| `module_info` | Module metadata |
+| `boot_volume_id` | OCID of the boot volume |
 
-See [outputs.tf](./outputs.tf) for complete list.
+### Network
+
+| Name | Description |
+|------|-------------|
+| `vcn_id` | OCID of the VCN (created or existing) |
+| `subnet_id` | OCID of the subnet (created or existing) |
+| `internet_gateway_id` | OCID of the Internet Gateway (if created) |
+| `route_table_id` | OCID of the route table (created or existing) |
+| `primary_vnic_id` | OCID of the primary VNIC |
+| `primary_vnic_private_ip_id` | OCID of the primary VNIC's private IP |
+
+### Security
+
+| Name | Description |
+|------|-------------|
+| `security_list_id` | OCID of the security list (if created) |
+| `nsg_id` | OCID of the Network Security Group (if created) |
+
+### Public IP
+
+| Name | Description |
+|------|-------------|
+| `reserved_public_ip_id` | OCID of the reserved public IP (if created) |
+| `reserved_public_ip_address` | IP address of the reserved public IP (if created) |
+
+### Block Volumes
+
+| Name | Description |
+|------|-------------|
+| `block_volume_ids` | Map of block volume names to OCIDs |
+| `block_volume_attachments` | Map of block volume attachment details |
+
+### Secondary VNICs
+
+| Name | Description |
+|------|-------------|
+| `secondary_vnic_ids` | Map of secondary VNIC names to OCIDs |
+| `secondary_vnic_private_ips` | Map of secondary VNIC names to private IPs |
+
+### Helpers
+
+| Name | Description |
+|------|-------------|
+| `ssh_command` | Ready-to-use SSH command to connect to the instance |
+| `module_info` | Module metadata and configuration summary |
+
+See [outputs.tf](./outputs.tf) for full output definitions.
 
 ## Examples
 

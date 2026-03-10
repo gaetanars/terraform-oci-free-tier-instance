@@ -8,7 +8,7 @@ This example demonstrates the minimal configuration required to deploy an Oracle
 - **Subnet**: A public subnet with CIDR `10.0.1.0/24`
 - **Internet Gateway**: For internet access
 - **Route Table**: With route to Internet Gateway
-- **Security List**: Default rules (SSH from anywhere, ICMP, allow all egress)
+- **Security List**: Default rules (SSH restricted to `allowed_ssh_cidrs`, ICMP, allow all egress)
 - **Compute Instance**: VM.Standard.A1.Flex (2 OCPUs, 12GB RAM, 50GB boot volume)
 - **Public IP**: Ephemeral (temporary, changes on instance restart)
 
@@ -69,7 +69,7 @@ module "oci_instance" {
   public_ip_mode           = "reserved"
   reserved_ip_display_name = "my-reserved-ip"
 
-  # Restrict SSH access
+  # SSH is closed by default — provide your IP
   allowed_ssh_cidrs = ["1.2.3.4/32"]
 }
 ```

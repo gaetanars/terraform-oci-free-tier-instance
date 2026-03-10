@@ -11,6 +11,9 @@ data "oci_identity_availability_domains" "ads" {
 # ============================================================================
 
 data "oci_core_images" "ubuntu_arm" {
+  # Only fetched when auto-selecting an image for an ARM shape
+  count = var.source_image_id == null && var.source_type == "image" && can(regex("A1", var.instance_shape)) ? 1 : 0
+
   compartment_id           = var.compartment_id
   operating_system         = "Canonical Ubuntu"
   operating_system_version = var.os_version
@@ -30,6 +33,9 @@ data "oci_core_images" "ubuntu_arm" {
 # ============================================================================
 
 data "oci_core_images" "ubuntu_amd" {
+  # Only fetched when auto-selecting an image for an x86 shape
+  count = var.source_image_id == null && var.source_type == "image" && !can(regex("A1", var.instance_shape)) ? 1 : 0
+
   compartment_id           = var.compartment_id
   operating_system         = "Canonical Ubuntu"
   operating_system_version = var.os_version
@@ -50,12 +56,11 @@ data "oci_core_images" "ubuntu_amd" {
 
 data "oci_core_vnic_attachments" "instance_vnics" {
   compartment_id      = var.compartment_id
-  instance_id         = local.instance.id
+  instance_id         = oci_core_instance.this.id
   availability_domain = local.availability_domain
 
   depends_on = [
     oci_core_instance.this,
-    oci_core_instance.this_ignore_metadata,
   ]
 }
 
@@ -68,7 +73,6 @@ data "oci_core_vnic" "primary_vnic" {
 
   depends_on = [
     oci_core_instance.this,
-    oci_core_instance.this_ignore_metadata,
   ]
 }
 
@@ -81,6 +85,5 @@ data "oci_core_private_ips" "primary_vnic_private_ips" {
 
   depends_on = [
     oci_core_instance.this,
-    oci_core_instance.this_ignore_metadata,
   ]
 }
