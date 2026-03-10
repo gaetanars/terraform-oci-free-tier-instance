@@ -53,7 +53,7 @@ resource "oci_core_instance" "this" {
   }
 
   freeform_tags = var.freeform_tags
-  defined_tags  = var.defined_tags
+  defined_tags  = length(var.defined_tags) > 0 ? var.defined_tags : null
 }
 
 # Migration: move existing state from this_ignore_metadata[0] to this
@@ -82,7 +82,7 @@ resource "oci_core_public_ip" "this" {
   # }
 
   freeform_tags = var.freeform_tags
-  defined_tags  = var.defined_tags
+  defined_tags  = length(var.defined_tags) > 0 ? var.defined_tags : null
 
   depends_on = [
     oci_core_instance.this,
