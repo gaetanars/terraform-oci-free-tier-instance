@@ -59,9 +59,6 @@ locals {
 
   # Detect if shape is ARM-based
   is_arm_shape = can(regex("A1", var.instance_shape))
-
-  # Detect if shape is x86-based
-  is_amd_shape = can(regex("E2", var.instance_shape))
 }
 
 # ============================================================================
