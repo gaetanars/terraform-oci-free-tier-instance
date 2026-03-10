@@ -82,7 +82,7 @@ resource "oci_core_security_list" "this" {
   }
 
   freeform_tags = var.freeform_tags
-  defined_tags  = var.defined_tags
+  defined_tags  = length(var.defined_tags) > 0 ? var.defined_tags : null
 }
 
 # ============================================================================
@@ -97,7 +97,7 @@ resource "oci_core_network_security_group" "this" {
   display_name   = var.nsg_display_name
 
   freeform_tags = var.freeform_tags
-  defined_tags  = var.defined_tags
+  defined_tags  = length(var.defined_tags) > 0 ? var.defined_tags : null
 }
 
 # ============================================================================
