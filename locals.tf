@@ -7,6 +7,7 @@ locals {
   create_vcn    = var.vcn_id == null
   create_subnet = var.subnet_id == null
   create_igw    = local.create_vcn && var.subnet_type == "public"
+  create_nat_gw = local.create_vcn && var.subnet_type == "private" && var.create_nat_gateway
 
   # Network mode for metadata/debugging
   network_mode = (
@@ -30,6 +31,9 @@ locals {
 
   # IGW to use in the route table (created in full-stack mode, or provided for hybrid mode)
   igw_id = local.create_igw ? oci_core_internet_gateway.this[0].id : var.internet_gateway_id
+
+  # NAT Gateway to use in the route table (created in full-stack mode, or provided for hybrid mode)
+  nat_gw_id = local.create_nat_gw ? oci_core_nat_gateway.this[0].id : var.nat_gateway_id
 }
 
 # ============================================================================

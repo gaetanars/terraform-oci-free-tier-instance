@@ -75,6 +75,11 @@ output "internet_gateway_id" {
   value       = local.create_igw ? oci_core_internet_gateway.this[0].id : null
 }
 
+output "nat_gateway_id" {
+  description = "OCID of the NAT Gateway (if created)"
+  value       = local.create_nat_gw ? oci_core_nat_gateway.this[0].id : null
+}
+
 output "route_table_id" {
   description = "OCID of the route table (created or existing)"
   value       = local.route_table_id

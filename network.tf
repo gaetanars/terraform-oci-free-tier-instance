@@ -31,6 +31,22 @@ resource "oci_core_internet_gateway" "this" {
 }
 
 # ============================================================================
+# NAT Gateway
+# ============================================================================
+
+resource "oci_core_nat_gateway" "this" {
+  count = local.create_nat_gw ? 1 : 0
+
+  compartment_id = var.compartment_id
+  vcn_id         = local.vcn_id
+  display_name   = var.nat_gateway_display_name
+  block_traffic  = false
+
+  freeform_tags = var.freeform_tags
+  defined_tags  = var.defined_tags
+}
+
+# ============================================================================
 # Route Table
 # ============================================================================
 
@@ -51,6 +67,19 @@ resource "oci_core_route_table" "this" {
       destination       = "0.0.0.0/0"
       destination_type  = "CIDR_BLOCK"
       description       = "Route to Internet Gateway"
+    }
+  }
+
+  # Add route to NAT Gateway for private subnets with outbound internet access:
+  # - full-stack mode: uses the NAT GW created by this module (create_nat_gateway = true)
+  # - hybrid mode: uses var.nat_gateway_id (must be provided by the caller)
+  dynamic "route_rules" {
+    for_each = local.nat_gw_id != null && var.subnet_type == "private" ? [1] : []
+    content {
+      network_entity_id = local.nat_gw_id
+      destination       = "0.0.0.0/0"
+      destination_type  = "CIDR_BLOCK"
+      description       = "Route to NAT Gateway"
     }
   }
 
