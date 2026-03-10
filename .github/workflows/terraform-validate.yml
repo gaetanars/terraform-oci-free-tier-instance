@@ -1,0 +1,220 @@
+# Validates Terraform formatting, configuration correctness, and linting on every
+# pull request targeting main. No OCI credentials are required — validation runs
+# entirely offline using -backend=false and dummy variable values.
+
+name: Terraform Validate
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+# Cancel any in-progress run for the same PR branch so only the latest
+# commit triggers a full pipeline, saving runner minutes.
+concurrency:
+  group: terraform-validate-${{ github.head_ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Terraform version to use across all jobs. Pin to a specific minor series
+  # so the version is predictable. Bump deliberately when upgrading.
+  TF_VERSION: "1.11.x"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1 — Formatting
+  # Ensures all .tf files comply with the canonical terraform fmt style.
+  # This job requires no provider credentials.
+  # ---------------------------------------------------------------------------
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform ${{ env.TF_VERSION }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Check formatting (recursive)
+        # -check exits with a non-zero code if any file is not formatted.
+        # -recursive covers the root module and all examples in one pass.
+        run: terraform fmt -check -recursive
+
+  # ---------------------------------------------------------------------------
+  # Job 2 — Validation matrix
+  # Runs `terraform validate` on the root module and every example so that
+  # configuration correctness is verified for all entry points.
+  #
+  # -backend=false skips backend initialisation (no state credentials needed).
+  # Dummy TF_VAR_* values satisfy required variables without triggering real
+  # OCI API calls.
+  # ---------------------------------------------------------------------------
+  validate:
+    name: validate (${{ matrix.name }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      # Continue validating the remaining matrix items even if one fails so
+      # that the PR author sees all errors in a single run.
+      fail-fast: false
+      matrix:
+        include:
+          - name: root
+            path: "."
+          - name: example-minimal
+            path: "./examples/minimal"
+          - name: example-complete
+            path: "./examples/complete"
+          - name: example-existing-network
+            path: "./examples/existing-network"
+          - name: example-unifi
+            path: "./examples/unifi"
+
+    env:
+      # Provide stub values for required input variables so that validate can
+      # parse and type-check expressions without real data.
+      TF_VAR_compartment_id: "dummy"
+      TF_VAR_ssh_public_key: "dummy"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform ${{ env.TF_VERSION }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: terraform init (${{ matrix.name }})
+        working-directory: ${{ matrix.path }}
+        # -backend=false prevents Terraform from attempting to configure a
+        # remote backend, which would require credentials and network access.
+        run: terraform init -backend=false
+
+      - name: terraform validate (${{ matrix.name }})
+        working-directory: ${{ matrix.path }}
+        run: terraform validate
+
+  # ---------------------------------------------------------------------------
+  # Job 3 — TFLint
+  # Static analysis of the root module using TFLint. Catches issues that
+  # `terraform validate` does not cover (e.g. deprecated arguments, unused
+  # declarations, provider-specific rule violations).
+  # ---------------------------------------------------------------------------
+  tflint:
+    name: tflint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform ${{ env.TF_VERSION }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Set up TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          # Pin to a stable release; bump deliberately.
+          tflint_version: "v0.55.0"
+
+      - name: Initialise TFLint plugins
+        # --config=NOTEXIST falls back to defaults when no .tflint.hcl is
+        # present. If you add a .tflint.hcl in the future, remove this flag.
+        run: tflint --init
+
+      - name: Run TFLint on root module
+        run: tflint --format compact
+
+  # ---------------------------------------------------------------------------
+  # Job 4 — PR status comment
+  # Posts a single summary comment on the PR once all validation jobs have
+  # completed (success or failure) so reviewers have a quick status overview
+  # without leaving the PR page.
+  # ---------------------------------------------------------------------------
+  pr-comment:
+    name: PR status summary
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    # Always run so the comment is posted even when a previous job failed.
+    if: always()
+    needs:
+      - fmt
+      - validate
+      - tflint
+    steps:
+      - name: Post status comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const jobs = {
+              fmt:      '${{ needs.fmt.result }}',
+              validate: '${{ needs.validate.result }}',
+              tflint:   '${{ needs.tflint.result }}',
+            };
+
+            const icon = (result) =>
+              result === 'success' ? ':white_check_mark:' :
+              result === 'skipped' ? ':white_circle:'     :
+              ':x:';
+
+            const allPassed = Object.values(jobs).every(r => r === 'success');
+            const header    = allPassed
+              ? ':tada: **All Terraform checks passed.**'
+              : ':warning: **One or more Terraform checks failed.**';
+
+            const rows = Object.entries(jobs)
+              .map(([name, result]) => `| \`${name}\` | ${icon(result)} \`${result}\` |`)
+              .join('\n');
+
+            const body = [
+              `## Terraform Validate — ${header}`,
+              '',
+              '| Job | Status |',
+              '|-----|--------|',
+              rows,
+              '',
+              `> Triggered by commit ${context.sha.slice(0, 7)} on \`${context.ref.replace('refs/heads/', '')}\``,
+            ].join('\n');
+
+            // Find an existing bot comment to update rather than spamming new ones.
+            const marker = '<!-- terraform-validate-summary -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner:      context.repo.owner,
+              repo:       context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes(marker)
+            );
+
+            const fullBody = `${marker}\n${body}`;
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner:      context.repo.owner,
+                repo:       context.repo.repo,
+                comment_id: existing.id,
+                body:       fullBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: context.issue.number,
+                body:         fullBody,
+              });
+            }
