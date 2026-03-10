@@ -43,7 +43,7 @@ resource "oci_core_nat_gateway" "this" {
   block_traffic  = false
 
   freeform_tags = var.freeform_tags
-  defined_tags  = var.defined_tags
+  defined_tags  = length(var.defined_tags) > 0 ? var.defined_tags : null
 }
 
 # ============================================================================
@@ -73,6 +73,9 @@ resource "oci_core_route_table" "this" {
   # Add route to NAT Gateway for private subnets with outbound internet access:
   # - full-stack mode: uses the NAT GW created by this module (create_nat_gateway = true)
   # - hybrid mode: uses var.nat_gateway_id (must be provided by the caller)
+  # Note: when create_nat_gateway = true with subnet_type = "public", the NAT GW is
+  # created but NOT added here (IGW already owns 0.0.0.0/0). Use nat_gateway_id output
+  # to wire it into a separate route table for future private subnets.
   dynamic "route_rules" {
     for_each = local.nat_gw_id != null && var.subnet_type == "private" ? [1] : []
     content {

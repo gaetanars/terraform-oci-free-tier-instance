@@ -7,7 +7,7 @@ A universal, reusable Terraform module for deploying compute instances on Oracle
 - **Always Free Compatible**: Validates resources stay within OCI Always Free limits
 - **Flexible Network Modes**: Full stack (VCN + subnet + instance), hybrid, or existing network
 - **Public IP Options**: Reserved (persistent), ephemeral (temporary), or none (private)
-- **NAT Gateway Support**: Private subnets with outbound internet access (no inbound exposure)
+- **NAT Gateway Support**: Private subnets with outbound internet access, or pre-provisioned alongside a public subnet for future private subnets
 - **Auto Image Selection**: Automatically selects Ubuntu ARM or x86 images based on shape
 - **Security Options**: Security Lists and/or Network Security Groups (NSGs)
 - **Block Volumes**: Additional storage with automated attachment
@@ -26,11 +26,11 @@ This module validates configurations stay within OCI Always Free limits:
 
 ## Network Modes
 
-The module automatically detects the network mode based on provided variables:
+The module automatically detects the network mode based on provided variables. Gateways are **never created implicitly** — you must explicitly opt in with `create_internet_gateway` or `create_nat_gateway`.
 
-### 1. Full Stack Mode (Default)
+### 1. Full Stack — Public Subnet
 
-Creates complete infrastructure: VCN → Subnet → IGW → Route Table → Instance
+Creates a complete public network: VCN + IGW + Route Table + Subnet + Instance.
 
 ```hcl
 module "instance" {
@@ -39,12 +39,59 @@ module "instance" {
   compartment_id = var.compartment_id
   ssh_public_key = file("~/.ssh/id_rsa.pub")
 
-  # vcn_id and subnet_id are null (default)
-  # Module creates everything
+  create_internet_gateway = true  # required for public internet access
 }
 ```
 
-### 2. Existing Network Mode
+### 2. Full Stack — Private Subnet with NAT Gateway
+
+Creates a private subnet with a NAT Gateway for outbound-only internet access. The instance has no public IP and is unreachable from the internet:
+
+```hcl
+module "instance" {
+  source = "./modules/oci-free-tier-instance"
+
+  compartment_id = var.compartment_id
+  ssh_public_key = file("~/.ssh/id_rsa.pub")
+
+  subnet_type        = "private"
+  public_ip_mode     = "none"
+  create_nat_gateway = true  # NAT GW wired into the route table (0.0.0.0/0)
+}
+```
+
+### 3. Full Stack — Public Subnet + NAT Gateway
+
+Creates a public subnet (IGW) **and** pre-provisions a NAT Gateway in the same VCN. The IGW is wired into the route table for the public subnet; the NAT Gateway is available via the `nat_gateway_id` output for future private subnets without redeploying the core network:
+
+```hcl
+module "instance" {
+  source = "./modules/oci-free-tier-instance"
+
+  compartment_id = var.compartment_id
+  ssh_public_key = file("~/.ssh/id_rsa.pub")
+
+  create_internet_gateway = true  # wired into route table (0.0.0.0/0)
+  create_nat_gateway      = true  # provisioned, exposed via nat_gateway_id output
+}
+```
+
+Use the output to wire the NAT Gateway into a separate route table for private subnets:
+
+```hcl
+resource "oci_core_route_table" "private" {
+  compartment_id = var.compartment_id
+  vcn_id         = module.instance.vcn_id
+
+  route_rules {
+    network_entity_id = module.instance.nat_gateway_id
+    destination       = "0.0.0.0/0"
+    destination_type  = "CIDR_BLOCK"
+  }
+}
+```
+
+### 4. Existing Network Mode
 
 Uses existing VCN and subnet, only creates instance:
 
@@ -60,43 +107,26 @@ module "instance" {
 }
 ```
 
-### 3. Hybrid Mode
+### 5. Hybrid Mode
 
-Uses existing VCN, creates new subnet. For public subnets, provide the existing IGW OCID via `internet_gateway_id` so the module can add the default route:
+Uses existing VCN, creates new subnet. Provide existing gateway OCIDs so the module can add the default route:
 
 ```hcl
+# Public subnet in existing VCN
 module "instance" {
   source = "./modules/oci-free-tier-instance"
 
   compartment_id = var.compartment_id
   ssh_public_key = file("~/.ssh/id_rsa.pub")
 
-  vcn_id               = "ocid1.vcn.oc1...."
-  subnet_cidr_block    = "10.0.2.0/24"
-  internet_gateway_id  = "ocid1.internetgateway.oc1...."  # required for public subnet
+  vcn_id              = "ocid1.vcn.oc1...."
+  subnet_cidr_block   = "10.0.2.0/24"
+  internet_gateway_id = "ocid1.internetgateway.oc1...."  # wired into route table
 }
 ```
 
-### 4. Private Subnet with NAT Gateway (Full Stack)
-
-Creates a private subnet with a NAT Gateway for outbound-only internet access. The instance has no public IP and is unreachable from the internet:
-
 ```hcl
-module "instance" {
-  source = "./modules/oci-free-tier-instance"
-
-  compartment_id = var.compartment_id
-  ssh_public_key = file("~/.ssh/id_rsa.pub")
-
-  subnet_type        = "private"
-  public_ip_mode     = "none"
-  create_nat_gateway = true  # NAT GW created in full-stack mode
-}
-```
-
-In hybrid mode (existing VCN), provide the existing NAT Gateway OCID instead:
-
-```hcl
+# Private subnet in existing VCN
 module "instance" {
   source = "./modules/oci-free-tier-instance"
 
@@ -106,7 +136,7 @@ module "instance" {
   vcn_id         = "ocid1.vcn.oc1...."
   subnet_type    = "private"
   public_ip_mode = "none"
-  nat_gateway_id = "ocid1.natgateway.oc1...."  # required for outbound access
+  nat_gateway_id = "ocid1.natgateway.oc1...."  # wired into route table
 }
 ```
 
@@ -168,6 +198,9 @@ module "oci_instance" {
   compartment_id = "ocid1.compartment.oc1...."
   ssh_public_key = file("~/.ssh/id_rsa.pub")
 
+  # Gateway must be explicitly requested
+  create_internet_gateway = true
+
   # SSH is closed by default — explicitly allow your IP
   allowed_ssh_cidrs = ["1.2.3.4/32"]
 }
@@ -199,10 +232,11 @@ module "oci_instance" {
   os_version              = "24.04"
 
   # Network
-  vcn_cidr_blocks   = ["10.1.0.0/16"]
-  subnet_cidr_block = "10.1.1.0/24"
-  vcn_dns_label     = "myvnet"
-  subnet_dns_label  = "mysubnet"
+  vcn_cidr_blocks         = ["10.1.0.0/16"]
+  subnet_cidr_block       = "10.1.1.0/24"
+  vcn_dns_label           = "myvnet"
+  subnet_dns_label        = "mysubnet"
+  create_internet_gateway = true
 
   # Public IP
   public_ip_mode           = "reserved"
@@ -479,9 +513,10 @@ module "instance" {
 
 | Name | Description | Type | Default |
 |------|-------------|------|---------|
-| `internet_gateway_id` | Existing IGW OCID — required for hybrid mode with public subnet | `string` | `null` |
+| `create_internet_gateway` | Create an Internet Gateway in the VCN — **required for public subnets in full-stack mode** | `bool` | `false` |
+| `internet_gateway_id` | Existing IGW OCID — used in hybrid mode for public subnets | `string` | `null` |
 | `internet_gateway_display_name` | Display name for the Internet Gateway | `string` | `"oci-igw"` |
-| `create_nat_gateway` | Create a NAT Gateway for outbound internet from private subnet (full-stack mode only) | `bool` | `false` |
+| `create_nat_gateway` | Create a NAT Gateway in the VCN — wired into route table for private subnets; exposed as output for public subnets | `bool` | `false` |
 | `nat_gateway_id` | Existing NAT Gateway OCID — used in hybrid mode with private subnet | `string` | `null` |
 | `nat_gateway_display_name` | Display name for the NAT Gateway | `string` | `"oci-nat-gateway"` |
 | `route_table_id` | Existing route table OCID. If null, uses VCN default or creates new | `string` | `null` |
@@ -625,10 +660,11 @@ See [outputs.tf](./outputs.tf) for full output definitions.
 
 See the [examples/](./examples/) directory:
 
-- **[minimal/](./examples/minimal/)**: Minimal configuration (3 lines)
+- **[minimal/](./examples/minimal/)**: Minimal configuration
 - **[complete/](./examples/complete/)**: All features demonstrated
 - **[existing-network/](./examples/existing-network/)**: Using existing VCN/subnet
 - **[private-nat/](./examples/private-nat/)**: Private subnet with NAT Gateway (outbound-only internet)
+- **[public-nat/](./examples/public-nat/)**: Public subnet with IGW + NAT Gateway pre-provisioned
 - **[unifi/](./examples/unifi/)**: UniFi Network Server deployment
 
 ## Requirements

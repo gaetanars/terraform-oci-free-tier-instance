@@ -77,14 +77,24 @@ jobs:
             path: "./examples/complete"
           - name: example-existing-network
             path: "./examples/existing-network"
+          - name: example-private-nat
+            path: "./examples/private-nat"
+          - name: example-public-nat
+            path: "./examples/public-nat"
           - name: example-unifi
             path: "./examples/unifi"
 
     env:
       # Provide stub values for required input variables so that validate can
       # parse and type-check expressions without real data.
+      # Variables not declared in a given example are silently ignored by Terraform.
       TF_VAR_compartment_id: "dummy"
       TF_VAR_ssh_public_key: "dummy"
+      TF_VAR_tenancy_ocid: "dummy"
+      TF_VAR_user_ocid: "dummy"
+      TF_VAR_fingerprint: "dummy"
+      TF_VAR_private_key_path: "dummy"
+      TF_VAR_compartment_ocid: "dummy"
 
     steps:
       - name: Checkout repository

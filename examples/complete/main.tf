@@ -37,10 +37,11 @@ module "oci_instance" {
   os_version              = var.os_version
 
   # Network Configuration (Full Stack)
-  vcn_cidr_blocks   = [var.vcn_cidr_block]
-  subnet_cidr_block = var.subnet_cidr_block
-  vcn_dns_label     = "completevnet"
-  subnet_dns_label  = "completesubnet"
+  vcn_cidr_blocks         = [var.vcn_cidr_block]
+  subnet_cidr_block       = var.subnet_cidr_block
+  vcn_dns_label           = "completevnet"
+  subnet_dns_label        = "completesubnet"
+  create_internet_gateway = true
 
   # Public IP (Reserved)
   public_ip_mode           = "reserved"
