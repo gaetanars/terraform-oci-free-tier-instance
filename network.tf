@@ -57,7 +57,7 @@ resource "oci_core_route_table" "this" {
   vcn_id         = local.vcn_id
   display_name   = var.route_table_display_name
 
-  # Add route to Internet Gateway for public subnets:
+  # Add route to Internet Gateway for public subnets with an IGW:
   # - full-stack mode: uses the IGW created by this module
   # - hybrid mode: uses var.internet_gateway_id (must be provided by the caller)
   dynamic "route_rules" {
@@ -70,14 +70,11 @@ resource "oci_core_route_table" "this" {
     }
   }
 
-  # Add route to NAT Gateway for private subnets with outbound internet access:
-  # - full-stack mode: uses the NAT GW created by this module (create_nat_gateway = true)
-  # - hybrid mode: uses var.nat_gateway_id (must be provided by the caller)
-  # Note: when create_nat_gateway = true with subnet_type = "public", the NAT GW is
-  # created but NOT added here (IGW already owns 0.0.0.0/0). Use nat_gateway_id output
-  # to wire it into a separate route table for future private subnets.
+  # Add route to NAT Gateway for:
+  # - private subnets (always, when a NAT GW is available)
+  # - public subnets without an IGW (outbound-only internet via NAT GW)
   dynamic "route_rules" {
-    for_each = local.nat_gw_id != null && var.subnet_type == "private" ? [1] : []
+    for_each = local.nat_gw_id != null && (var.subnet_type == "private" || local.igw_id == null) ? [1] : []
     content {
       network_entity_id = local.nat_gw_id
       destination       = "0.0.0.0/0"

@@ -29,8 +29,10 @@ provider "oci" {
 # Architecture:
 #   VCN
 #   ├── Internet Gateway  ← route table (0.0.0.0/0) for the public subnet
-#   ├── NAT Gateway       ← available via nat_gateway_id output (not wired
-#   │                        into this route table — IGW already owns 0.0.0.0/0)
+#   ├── NAT Gateway       ← available via nat_gateway_id output; not wired
+#   │                        into this route table since IGW already owns
+#   │                        0.0.0.0/0. Set create_internet_gateway = false
+#   │                        to route outbound traffic through the NAT GW only.
 #   └── Public Subnet → Instance (public IP)
 # ============================================================================
 
