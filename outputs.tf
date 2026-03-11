@@ -20,7 +20,7 @@ output "instance_private_ip" {
 output "instance_public_ip" {
   description = "Public IP address of the instance (null if public_ip_mode = 'none')"
   value = (
-    local.create_reserved_ip ? oci_core_public_ip.this[0].ip_address :
+    local.create_reserved_ip ? local.reserved_ip_address :
     local.assign_ephemeral_ip ? data.oci_core_vnic.primary_vnic.public_ip_address :
     null
   )
@@ -80,6 +80,11 @@ output "nat_gateway_id" {
   value       = local.create_nat_gw ? oci_core_nat_gateway.this[0].id : null
 }
 
+output "service_gateway_id" {
+  description = "OCID of the Service Gateway (if created)"
+  value       = local.create_service_gw ? oci_core_service_gateway.this[0].id : null
+}
+
 output "route_table_id" {
   description = "OCID of the route table (created or existing)"
   value       = local.route_table_id
@@ -115,12 +120,12 @@ output "nsg_id" {
 
 output "reserved_public_ip_id" {
   description = "OCID of the reserved public IP (if created)"
-  value       = local.create_reserved_ip ? oci_core_public_ip.this[0].id : null
+  value       = local.reserved_ip_id
 }
 
 output "reserved_public_ip_address" {
   description = "IP address of the reserved public IP (if created)"
-  value       = local.create_reserved_ip ? oci_core_public_ip.this[0].ip_address : null
+  value       = local.reserved_ip_address
 }
 
 # ============================================================================
@@ -176,9 +181,18 @@ output "ssh_command" {
   description = "SSH command to connect to the instance"
   value = (
     local.has_public_ip ?
-    "ssh ${var.ssh_user}@${local.create_reserved_ip ? oci_core_public_ip.this[0].ip_address : data.oci_core_vnic.primary_vnic.public_ip_address}" :
+    "ssh ${var.ssh_user}@${local.create_reserved_ip ? local.reserved_ip_address : data.oci_core_vnic.primary_vnic.public_ip_address}" :
     "Instance has no public IP (private only)"
   )
+}
+
+# ============================================================================
+# Network Warnings
+# ============================================================================
+
+output "network_warnings" {
+  description = "List of configuration warnings (empty = no issues detected). Check these after apply to catch misconfigurations early."
+  value       = local.network_warnings
 }
 
 # ============================================================================

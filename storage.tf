@@ -68,10 +68,11 @@ resource "oci_core_volume_backup_policy_assignment" "block_volume_backup_assignm
   asset_id = oci_core_volume.block_volumes[each.key].id
   policy_id = (
     # If backup_policy_id is "bronze", "silver", or "gold", find the OCID from predefined policies
+    # one() returns null on empty list (clearer error than index out of bounds)
     contains(["bronze", "silver", "gold"], each.value.backup_policy_id) ?
-    [for policy in data.oci_core_volume_backup_policies.predefined_policies[0].volume_backup_policies :
+    one([for policy in data.oci_core_volume_backup_policies.predefined_policies[0].volume_backup_policies :
       policy.id if lower(policy.display_name) == lower(each.value.backup_policy_id)
-    ][0] :
+    ]) :
     # Otherwise, assume it's a custom policy OCID
     each.value.backup_policy_id
   )
