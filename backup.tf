@@ -20,9 +20,10 @@ resource "oci_core_volume_backup_policy_assignment" "boot_volume_backup" {
   policy_id = (
     # If backup_policy is "bronze", "silver", or "gold", find the OCID from predefined policies
     contains(["bronze", "silver", "gold"], var.boot_volume_backup_policy) ?
-    [for policy in data.oci_core_volume_backup_policies.boot_volume_policies[0].volume_backup_policies :
+    # one() returns null on empty list (clearer error than index out of bounds)
+    one([for policy in data.oci_core_volume_backup_policies.boot_volume_policies[0].volume_backup_policies :
       policy.id if lower(policy.display_name) == lower(var.boot_volume_backup_policy)
-    ][0] :
+    ]) :
     # Otherwise, assume it's a custom policy OCID
     var.boot_volume_backup_policy
   )

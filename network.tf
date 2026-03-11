@@ -47,6 +47,36 @@ resource "oci_core_nat_gateway" "this" {
 }
 
 # ============================================================================
+# Service Gateway
+# ============================================================================
+
+# OCI "All Services" CIDR — used as the Service Gateway destination in the route table
+data "oci_core_services" "all_oci_services" {
+  count = local.create_service_gw || var.service_gateway_id != null ? 1 : 0
+
+  filter {
+    name   = "name"
+    values = ["All .* Services In Oracle Services Network"]
+    regex  = true
+  }
+}
+
+resource "oci_core_service_gateway" "this" {
+  count = local.create_service_gw ? 1 : 0
+
+  compartment_id = var.compartment_id
+  vcn_id         = local.vcn_id
+  display_name   = var.service_gateway_display_name
+
+  services {
+    service_id = data.oci_core_services.all_oci_services[0].services[0].id
+  }
+
+  freeform_tags = var.freeform_tags
+  defined_tags  = length(var.defined_tags) > 0 ? var.defined_tags : null
+}
+
+# ============================================================================
 # Route Table
 # ============================================================================
 
@@ -80,6 +110,17 @@ resource "oci_core_route_table" "this" {
       destination       = "0.0.0.0/0"
       destination_type  = "CIDR_BLOCK"
       description       = "Route to NAT Gateway"
+    }
+  }
+
+  # Add route to Service Gateway for OCI internal services (Object Storage, etc.)
+  dynamic "route_rules" {
+    for_each = local.service_gw_id != null ? [1] : []
+    content {
+      network_entity_id = local.service_gw_id
+      destination       = data.oci_core_services.all_oci_services[0].services[0].cidr_block
+      destination_type  = "SERVICE_CIDR_BLOCK"
+      description       = "Route to OCI Service Gateway (Object Storage and other OCI services)"
     }
   }
 

@@ -67,19 +67,38 @@ moved {
 # Reserved Public IP - Create and Assign to Primary VNIC Private IP
 # ============================================================================
 
+# Reserved IP without deletion protection (default)
 resource "oci_core_public_ip" "this" {
-  count = local.create_reserved_ip ? 1 : 0
+  count = local.create_reserved_ip && !var.reserved_ip_prevent_destroy ? 1 : 0
 
   compartment_id = var.compartment_id
   lifetime       = "RESERVED"
   display_name   = var.reserved_ip_display_name
   private_ip_id  = data.oci_core_private_ips.primary_vnic_private_ips.private_ips[0].id
 
-  # Note: prevent_destroy cannot use variables in Terraform
-  # Uncomment and set to true manually in production if needed
-  # lifecycle {
-  #   prevent_destroy = true
-  # }
+  freeform_tags = var.freeform_tags
+  defined_tags  = length(var.defined_tags) > 0 ? var.defined_tags : null
+
+  depends_on = [
+    oci_core_instance.this,
+    data.oci_core_private_ips.primary_vnic_private_ips
+  ]
+}
+
+# Reserved IP with deletion protection (set reserved_ip_prevent_destroy = true)
+# Terraform does not allow variables in lifecycle.prevent_destroy, hence the two-resource pattern.
+# WARNING: switching reserved_ip_prevent_destroy after the IP is created will destroy and recreate it.
+resource "oci_core_public_ip" "this_protected" {
+  count = local.create_reserved_ip && var.reserved_ip_prevent_destroy ? 1 : 0
+
+  compartment_id = var.compartment_id
+  lifetime       = "RESERVED"
+  display_name   = var.reserved_ip_display_name
+  private_ip_id  = data.oci_core_private_ips.primary_vnic_private_ips.private_ips[0].id
+
+  lifecycle {
+    prevent_destroy = true
+  }
 
   freeform_tags = var.freeform_tags
   defined_tags  = length(var.defined_tags) > 0 ? var.defined_tags : null

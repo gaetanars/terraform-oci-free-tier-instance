@@ -17,15 +17,10 @@ data "oci_core_images" "ubuntu_arm" {
   compartment_id           = var.compartment_id
   operating_system         = "Canonical Ubuntu"
   operating_system_version = var.os_version
-  shape                    = "VM.Standard.A1.Flex"
-  sort_by                  = "TIMECREATED"
-  sort_order               = "DESC"
-
-  filter {
-    name   = "display_name"
-    values = [".*aarch64.*"]
-    regex  = true
-  }
+  # shape already constrains the results to ARM-compatible images — no display_name filter needed
+  shape      = "VM.Standard.A1.Flex"
+  sort_by    = "TIMECREATED"
+  sort_order = "DESC"
 }
 
 # ============================================================================
@@ -39,15 +34,10 @@ data "oci_core_images" "ubuntu_amd" {
   compartment_id           = var.compartment_id
   operating_system         = "Canonical Ubuntu"
   operating_system_version = var.os_version
-  shape                    = "VM.Standard.E2.1.Micro"
-  sort_by                  = "TIMECREATED"
-  sort_order               = "DESC"
-
-  filter {
-    name   = "display_name"
-    values = [".*amd64.*"]
-    regex  = true
-  }
+  # shape already constrains the results to x86-compatible images — no display_name filter needed
+  shape      = "VM.Standard.E2.1.Micro"
+  sort_by    = "TIMECREATED"
+  sort_order = "DESC"
 }
 
 # ============================================================================

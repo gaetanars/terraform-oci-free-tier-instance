@@ -254,6 +254,28 @@ variable "route_table_id" {
 }
 
 # ============================================================================
+# Network Configuration - Service Gateway
+# ============================================================================
+
+variable "create_service_gateway" {
+  description = "Create a Service Gateway to access OCI services (Object Storage, etc.) without going through the internet. Free of charge. Full-stack mode only (requires vcn_id = null). Automatically wired into the route table."
+  type        = bool
+  default     = false
+}
+
+variable "service_gateway_id" {
+  description = "OCID of an existing Service Gateway in the provided VCN. Used in hybrid mode (vcn_id provided, subnet_id null) to route traffic to OCI services without internet."
+  type        = string
+  default     = null
+}
+
+variable "service_gateway_display_name" {
+  description = "Display name for the Service Gateway (used when create_service_gateway = true)"
+  type        = string
+  default     = "oci-service-gateway"
+}
+
+# ============================================================================
 # Public IP Configuration
 # ============================================================================
 
@@ -274,8 +296,11 @@ variable "reserved_ip_display_name" {
   default     = "oci-reserved-ip"
 }
 
-# Note: prevent_destroy in lifecycle blocks cannot use variables
-# To prevent IP deletion, manually uncomment the lifecycle block in compute.tf
+variable "reserved_ip_prevent_destroy" {
+  description = "Protect the reserved public IP from accidental deletion via terraform destroy. Terraform does not allow variables in lifecycle.prevent_destroy, so this uses two separate resource definitions internally. Switching this value after the IP is created will cause the IP to be destroyed and recreated."
+  type        = bool
+  default     = false
+}
 
 # ============================================================================
 # Security Configuration - Security Lists

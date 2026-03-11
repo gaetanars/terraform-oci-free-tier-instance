@@ -34,6 +34,10 @@ locals {
 
   # NAT Gateway to use in the route table (created in full-stack mode, or provided for hybrid mode)
   nat_gw_id = local.create_nat_gw ? oci_core_nat_gateway.this[0].id : var.nat_gateway_id
+
+  # Service Gateway flags and ID
+  create_service_gw = local.create_vcn && var.create_service_gateway
+  service_gw_id     = local.create_service_gw ? oci_core_service_gateway.this[0].id : var.service_gateway_id
 }
 
 # ============================================================================
@@ -99,6 +103,10 @@ locals {
 
   # Whether the instance has any public IP (for outputs)
   has_public_ip = var.public_ip_mode != "none"
+
+  # Resolved reserved IP attributes (picks from the active resource regardless of prevent_destroy setting)
+  reserved_ip_id      = try(oci_core_public_ip.this_protected[0].id, try(oci_core_public_ip.this[0].id, null))
+  reserved_ip_address = try(oci_core_public_ip.this_protected[0].ip_address, try(oci_core_public_ip.this[0].ip_address, null))
 }
 
 # ============================================================================
@@ -235,6 +243,30 @@ locals {
     local.user_data_base64 != null ? { user_data = local.user_data_base64 } : {},
     var.extended_metadata
   )
+}
+
+# ============================================================================
+# Network Warnings (surfaced via output for post-apply inspection)
+# ============================================================================
+
+locals {
+  network_warnings = compact([
+    # Public subnet without any internet route — instance public IP will not be reachable
+    (var.subnet_type == "public" && var.subnet_id == null && local.igw_id == null && var.public_ip_mode != "none") ?
+    "Public subnet has no Internet Gateway — the instance public IP will not be routable. Set create_internet_gateway = true or provide internet_gateway_id." : null,
+
+    # create_internet_gateway silently ignored in hybrid/existing mode
+    (var.create_internet_gateway && var.vcn_id != null) ?
+    "create_internet_gateway = true is ignored when vcn_id is provided. Use internet_gateway_id to reference an existing IGW." : null,
+
+    # create_nat_gateway silently ignored in hybrid/existing mode
+    (var.create_nat_gateway && var.vcn_id != null) ?
+    "create_nat_gateway = true is ignored when vcn_id is provided. Use nat_gateway_id to reference an existing NAT Gateway." : null,
+
+    # VPU/GB above Always Free threshold
+    var.boot_volume_vpus_per_gb > 20 ?
+    "boot_volume_vpus_per_gb = ${var.boot_volume_vpus_per_gb} exceeds Always Free limit (max 20) — additional storage costs will apply." : null,
+  ])
 }
 
 # ============================================================================
